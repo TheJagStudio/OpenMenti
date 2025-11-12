@@ -1,0 +1,5 @@
+{
+  "name": "Live Quiz - Mentimeter Style",
+  "description": "A live, interactive quiz application inspired by Mentimeter, powered by the Gemini API for question generation and WebRTC for real-time multiplayer gameplay. A host can generate a quiz on any topic, and players can join using a unique code to compete for the top spot on the leaderboard based on speed and accuracy.",
+  "requestFramePermissions": []
+}
