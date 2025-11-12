@@ -45,7 +45,6 @@ const ResultsChart = ({ data, correctAnswer }: { data: { name: string, value: nu
 const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ hostPeerId, onReset }) => {
     const [topic, setTopic] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
-    const [players, setPlayers] = useState<Players>({});
     const [numQuestions, setNumQuestions] = useState(5);
     const [generationMode, setGenerationMode] = useState<'topic' | 'context'>('topic');
     const [fileContent, setFileContent] = useState<string | null>(null);
@@ -56,6 +55,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
         currentQuestionIndex: 0,
         playerAnswers: {},
         scores: {},
+        players: {},
         questionStartTime: null,
         showResults: false,
     });
@@ -66,8 +66,11 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
     // Fix: Typed `conn` parameter to ensure `conn.peer` is a string, preventing type inference issues.
     const handleIncomingData = useCallback((conn: { peer: string }, data: Message) => {
         if (data.type === 'PLAYER_JOIN') {
-            setPlayers(prev => ({ ...prev, [conn.peer]: { name: data.payload.name } }));
-            setGameState(prev => ({...prev, scores: {...prev.scores, [conn.peer]: 0 }}));
+             setGameState(prev => {
+                const newPlayers = { ...prev.players, [conn.peer]: { name: data.payload.name } };
+                const newScores = { ...prev.scores, [conn.peer]: 0 };
+                return { ...prev, players: newPlayers, scores: newScores };
+            });
         } else if (data.type === 'PLAYER_ANSWER') {
              setGameState(prev => {
                 const newPlayerAnswers = { ...prev.playerAnswers };
@@ -109,14 +112,20 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
     useEffect(() => {
         // Handle player disconnections
         const connectedPeerIds = connections.map(c => c.peer);
-        setPlayers(prevPlayers => {
-            const newPlayers = { ...prevPlayers };
+        setGameState(prevGameState => {
+            const currentPlayers = prevGameState.players;
+            const newPlayers = { ...currentPlayers };
+            let playersChanged = false;
             Object.keys(newPlayers).forEach(peerId => {
                 if (!connectedPeerIds.includes(peerId)) {
                     delete newPlayers[peerId];
+                    playersChanged = true;
                 }
             });
-            return newPlayers;
+            if (playersChanged) {
+                return { ...prevGameState, players: newPlayers };
+            }
+            return prevGameState;
         });
     }, [connections]);
 
@@ -177,8 +186,8 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
     
     const startGame = () => {
         if (gameState.questions.length > 0) {
-            const initialScores = Object.keys(players).reduce((acc, peerId) => ({...acc, [peerId]: 0}), {});
-            setGameState(prev => ({ ...prev, status: 'in-progress', currentQuestionIndex: 0, showResults: false, questionStartTime: Date.now(), scores: initialScores }));
+            const initialScores = Object.keys(gameState.players).reduce((acc, peerId) => ({ ...acc, [peerId]: 0 }), {});
+            setGameState(prev => ({ ...prev, status: 'in-progress', currentQuestionIndex: 0, showResults: false, questionStartTime: Date.now(), scores: initialScores, playerAnswers: {} }));
             startTimer();
         }
     };
@@ -223,7 +232,8 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
         Object.values(answers).forEach(answer => {
             if (counts[answer.option] !== undefined) counts[answer.option]++;
         });
-        return Object.entries(counts).map(([name, value]) => ({ name, value }));
+        // FIX: Cast value to number as Object.entries infers it as unknown.
+        return Object.entries(counts).map(([name, value]) => ({ name, value: value as number }));
     };
 
     const getControlButton = () => {
@@ -242,7 +252,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
     }
     
     const currentQuestion = gameState.questions[gameState.currentQuestionIndex];
-    const playerList = Object.values(players);
+    const playerList = Object.values(gameState.players);
 
     return (
         <div className="w-full mx-auto flex flex-col min-h-screen bg-white rounded-lg shadow-lg border border-gray-200">
@@ -324,14 +334,15 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
                     <div className="mt-auto pt-4">
                         <h3 className="text-lg font-bold text-gray-700 mt-6 mb-2">Players Connected ({playerList.length})</h3>
                         <ul className="space-y-1 max-h-48 overflow-y-auto">
-                            {playerList.map(p => <li key={p.name} className="text-gray-600 bg-gray-200 p-2 rounded-md text-sm truncate">{p.name}</li>)}
+                            {/* FIX: Explicitly type 'p' because Object.values infers it as unknown. */}
+                            {playerList.map((p: { name: string }) => <li key={p.name} className="text-gray-600 bg-gray-200 p-2 rounded-md text-sm truncate">{p.name}</li>)}
                         </ul>
                     </div>
                 </aside>
 
                 <main className="lg:col-span-3 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
                     {gameState.status === 'lobby' && <p className="text-2xl text-gray-500">{gameState.questions.length > 0 ? `Quiz on "${topic}" is ready!` : "Generate a quiz to begin."}</p>}
-                    {gameState.status === 'finished' && <div className="text-center"><h2 className="text-3xl font-bold mb-4">Final Results</h2><Leaderboard scores={gameState.scores} players={players} /></div>}
+                    {gameState.status === 'finished' && <div className="text-center"><h2 className="text-3xl font-bold mb-4">Final Results</h2><Leaderboard scores={gameState.scores} players={gameState.players} isFinal={true} /></div>}
                     {(gameState.status === 'in-progress' || gameState.status === 'question-results') && currentQuestion && (
                         <div className="w-full text-center">
                             <p className="text-lg text-gray-500">Question {gameState.currentQuestionIndex + 1} / {gameState.questions.length}</p>
@@ -342,7 +353,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
                     {gameState.status === 'leaderboard' && (
                         <div className="w-full text-center">
                             <h2 className="text-3xl font-bold mb-4">Leaderboard</h2>
-                             <Leaderboard scores={gameState.scores} players={players} />
+                             <Leaderboard scores={gameState.scores} players={gameState.players} />
                         </div>
                     )}
                 </main>

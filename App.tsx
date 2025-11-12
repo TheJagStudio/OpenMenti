@@ -6,6 +6,7 @@ import Lobby from './components/Lobby';
 declare global {
     interface Window {
         Peer: any;
+        confetti: any;
     }
 }
 
