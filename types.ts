@@ -40,3 +40,6 @@ export type Message =
     | { type: 'GAME_STATE_UPDATE'; payload: GameState }
     | { type: 'PLAYER_JOIN'; payload: { name: string } }
     | { type: 'PLAYER_ANSWER'; payload: { questionIndex: number; option: string; submittedAt: number } };
+
+export const QUESTION_TIME_LIMIT = 20; // in seconds
+export const MAX_POINTS_PER_QUESTION = 1000;
