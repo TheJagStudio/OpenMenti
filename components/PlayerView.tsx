@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePeer } from '../hooks/usePeer';
-import { GameState, Message } from '../types';
+import { GameState, Message, QUESTION_TIME_LIMIT } from '../types';
 import QuestionDisplay from './QuestionDisplay';
 import { LogoIcon } from './icons/LifelineIcons';
 
@@ -14,6 +14,8 @@ const PlayerView: React.FC<PlayerViewProps> = ({ hostId, playerName, onReset }) 
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [myAnswer, setMyAnswer] = useState<string | null>(null);
     const [isConnected, setIsConnected] = useState(false);
+    const [timer, setTimer] = useState(QUESTION_TIME_LIMIT);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     
     const handleIncomingData = useCallback((conn: any, data: Message) => {
         if (data.type === 'GAME_STATE_UPDATE') {
@@ -40,6 +42,35 @@ const PlayerView: React.FC<PlayerViewProps> = ({ hostId, playerName, onReset }) 
             conn.on('error', () => setIsConnected(false));
         }
     }, [connect, hostId, playerName, sendToHost, myPeerId]);
+
+    useEffect(() => {
+        const stopTimer = () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+
+        if (gameState?.status === 'in-progress' && !myAnswer && gameState.questionStartTime) {
+            stopTimer();
+
+            const updateTimer = () => {
+                const elapsed = (Date.now() - (gameState.questionStartTime ?? 0)) / 1000;
+                const remaining = Math.max(0, Math.ceil(QUESTION_TIME_LIMIT - elapsed));
+                setTimer(remaining);
+                if (remaining <= 0) {
+                    stopTimer();
+                }
+            };
+
+            updateTimer();
+            timerRef.current = setInterval(updateTimer, 1000);
+        } else {
+            stopTimer();
+        }
+
+        return () => stopTimer();
+    }, [gameState?.status, myAnswer, gameState?.questionStartTime]);
 
     const handleSelectAnswer = (option: string) => {
         if (myAnswer || !gameState || gameState.showResults) return;
@@ -101,6 +132,43 @@ const PlayerView: React.FC<PlayerViewProps> = ({ hostId, playerName, onReset }) 
             }());
         }
     }, [gameState?.status, amIWinner]);
+
+    const TimerCircle = ({ timeLeft, timeLimit }: { timeLeft: number, timeLimit: number }) => {
+        const radius = 28;
+        const circumference = 2 * Math.PI * radius;
+        const progressOffset = circumference - (timeLeft / timeLimit) * circumference;
+    
+        const colorClass = timeLeft <= 5 ? 'stroke-red-500' : timeLeft <= 10 ? 'stroke-yellow-500' : 'stroke-blue-500';
+    
+        return (
+            <div className="absolute top-0 right-0 m-0 md:-m-4 w-20 h-20 z-10">
+                <svg className="w-full h-full" viewBox="0 0 60 60">
+                    <circle
+                        className="stroke-gray-200"
+                        strokeWidth="4"
+                        fill="transparent"
+                        r={radius}
+                        cx="30"
+                        cy="30"
+                    />
+                    <circle
+                        className={`transform -rotate-90 origin-center transition-all duration-1000 linear ${colorClass}`}
+                        strokeWidth="4"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={progressOffset}
+                        strokeLinecap="round"
+                        fill="transparent"
+                        r={radius}
+                        cx="30"
+                        cy="30"
+                    />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-gray-700">
+                    {timeLeft}
+                </span>
+            </div>
+        );
+    };
     
     const renderContent = () => {
         if (!isConnected) {
@@ -147,13 +215,16 @@ const PlayerView: React.FC<PlayerViewProps> = ({ hostId, playerName, onReset }) 
             )
         }
         return (
-             <QuestionDisplay
+            <>
+                <TimerCircle timeLeft={timer} timeLimit={QUESTION_TIME_LIMIT} />
+                <QuestionDisplay
                     question={currentQuestion}
                     onSelect={handleSelectAnswer}
                     selectedOption={myAnswer}
                     showCorrect={false}
                     disabled={!!myAnswer}
                 />
+            </>
         );
     }
 
@@ -167,7 +238,7 @@ const PlayerView: React.FC<PlayerViewProps> = ({ hostId, playerName, onReset }) 
                 </div>
             </header>
             <main className="flex-grow flex flex-col items-center justify-center p-4 md:p-8">
-                <div className="w-full max-w-4xl">
+                <div className="w-full max-w-4xl relative">
                  {renderContent()}
                 </div>
             </main>
