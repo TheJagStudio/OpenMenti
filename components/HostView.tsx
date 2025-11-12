@@ -46,6 +46,10 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
     const [topic, setTopic] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [players, setPlayers] = useState<Players>({});
+    const [numQuestions, setNumQuestions] = useState(5);
+    const [generationMode, setGenerationMode] = useState<'topic' | 'context'>('topic');
+    const [fileContent, setFileContent] = useState<string | null>(null);
+    const [fileName, setFileName] = useState<string>('');
     const [gameState, setGameState] = useState<GameState>({
         status: 'lobby',
         questions: [],
@@ -120,11 +124,49 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
         broadcast({ type: 'GAME_STATE_UPDATE', payload: gameState });
     }, [gameState, broadcast]);
 
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file && file.type === 'text/plain') {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target?.result as string;
+                setFileContent(text);
+                setFileName(file.name);
+                if (!topic.trim()) {
+                    setTopic(file.name.replace(/\.[^/.]+$/, ""));
+                }
+            };
+            reader.readAsText(file);
+        } else {
+            alert('Please upload a valid .txt file.');
+            setFileContent(null);
+            setFileName('');
+            if (event.target) {
+                event.target.value = '';
+            }
+        }
+    };
+
     const handleGenerateQuiz = async () => {
-        if (!topic.trim()) return;
+        const isTopicMode = generationMode === 'topic';
+        const finalTopic = topic.trim();
+
+        if (isTopicMode && !finalTopic) {
+            alert('Please enter a topic.');
+            return;
+        }
+        if (!isTopicMode && !fileContent) {
+            alert('Please upload a file first.');
+            return;
+        }
+        
         setIsGenerating(true);
         try {
-            const questions = await generateQuizQuestions(topic);
+            const questions = await generateQuizQuestions({
+                topic: finalTopic || (isTopicMode ? 'General Knowledge' : fileName),
+                numQuestions,
+                context: generationMode === 'context' ? fileContent ?? undefined : undefined,
+            });
             setGameState(prev => ({ ...prev, questions, status: 'lobby' }));
         } catch (error) {
             alert((error as Error).message);
@@ -218,8 +260,60 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
                     <h2 className="text-xl font-bold mb-4 text-gray-700">Game Controls</h2>
                      {gameState.status === 'lobby' && (
                         <div className="mb-4">
-                            <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Enter quiz topic" className="w-full bg-white border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            <button onClick={handleGenerateQuiz} disabled={isGenerating || !topic.trim()} className="w-full mt-2 bg-gray-700 hover:bg-gray-800 text-white font-bold py-2 px-4 rounded disabled:opacity-50 transition-all">
+                            <div className="flex border border-gray-300 rounded-md mb-4 overflow-hidden">
+                                <button
+                                    onClick={() => setGenerationMode('topic')}
+                                    className={`flex-1 p-2 text-sm font-semibold transition-colors focus:outline-none ${generationMode === 'topic' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    From Topic
+                                </button>
+                                <button
+                                    onClick={() => setGenerationMode('context')}
+                                    className={`flex-1 p-2 text-sm font-semibold transition-colors focus:outline-none border-l border-gray-300 ${generationMode === 'context' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                                >
+                                    From Text File
+                                </button>
+                            </div>
+
+                            {generationMode === 'topic' ? (
+                                <div>
+                                    <label htmlFor="topic-input" className="block text-sm font-medium text-gray-600 mb-1">Quiz Topic</label>
+                                    <input id="topic-input" type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g., Roman History" className="w-full bg-white border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <div>
+                                        <label htmlFor="file-upload" className="w-full bg-white border border-gray-300 rounded-md p-2 flex items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>
+                                            <span className="truncate">{fileName || 'Upload .txt file'}</span>
+                                        </label>
+                                        <input id="file-upload" type="file" accept=".txt" onChange={handleFileChange} className="hidden" />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="context-topic-input" className="block text-sm font-medium text-gray-600 mb-1">Quiz Title</label>
+                                        <input id="context-topic-input" type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Title derived from filename" className="w-full bg-white border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mt-4">
+                                <label htmlFor="num-questions" className="block text-sm font-medium text-gray-600 mb-1">Number of Questions</label>
+                                <input
+                                    id="num-questions"
+                                    type="number"
+                                    value={numQuestions}
+                                    onChange={(e) => setNumQuestions(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                                    min="1"
+                                    max="20"
+                                    className="w-full bg-white border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleGenerateQuiz}
+                                disabled={isGenerating || (generationMode === 'topic' && !topic.trim()) || (generationMode === 'context' && !fileContent)}
+                                className="w-full mt-4 bg-gray-700 hover:bg-gray-800 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
                                 {isGenerating ? 'Generating...' : 'Generate Quiz'}
                             </button>
                         </div>

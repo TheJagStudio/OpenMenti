@@ -14,7 +14,7 @@ const responseSchema = {
     properties: {
         questions: {
             type: Type.ARRAY,
-            description: "A list of 10 quiz questions.",
+            description: "A list of quiz questions.",
             items: {
                 type: Type.OBJECT,
                 properties: {
@@ -39,9 +39,11 @@ const responseSchema = {
     required: ["questions"],
 };
 
-export const generateQuizQuestions = async (topic: string): Promise<QuizQuestion[]> => {
+export const generateQuizQuestions = async ({ topic, numQuestions, context }: { topic: string; numQuestions: number; context?: string }): Promise<QuizQuestion[]> => {
     try {
-        const prompt = `Generate 10 challenging multiple-choice questions for a quiz game based on the topic: "${topic}". The difficulty should gradually increase. Ensure each question has 4 options and one correct answer. The correct answer must exactly match one of the options.`;
+        const prompt = context
+            ? `Based on the following context, generate ${numQuestions} challenging multiple-choice questions for a quiz game. The quiz title is "${topic}". The difficulty should gradually increase. Ensure each question has 4 options and one correct answer. The correct answer must exactly match one of the options.\n\nContext:\n${context}`
+            : `Generate ${numQuestions} challenging multiple-choice questions for a quiz game based on the topic: "${topic}". The difficulty should gradually increase. Ensure each question has 4 options and one correct answer. The correct answer must exactly match one of the options.`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
