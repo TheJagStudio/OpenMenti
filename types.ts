@@ -30,6 +30,7 @@ export interface GameState {
     currentQuestionIndex: number;
     playerAnswers: { [questionIndex: number]: PlayerAnswer };
     scores: Scores;
+    previousScores?: Scores;
     players: Players;
     questionStartTime: number | null; // Timestamp when the current question was shown
     showResults: boolean;

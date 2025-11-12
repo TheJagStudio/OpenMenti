@@ -187,7 +187,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
     const startGame = () => {
         if (gameState.questions.length > 0) {
             const initialScores = Object.keys(gameState.players).reduce((acc, peerId) => ({ ...acc, [peerId]: 0 }), {});
-            setGameState(prev => ({ ...prev, status: 'in-progress', currentQuestionIndex: 0, showResults: false, questionStartTime: Date.now(), scores: initialScores, playerAnswers: {} }));
+            setGameState(prev => ({ ...prev, status: 'in-progress', currentQuestionIndex: 0, showResults: false, questionStartTime: Date.now(), scores: initialScores, playerAnswers: {}, previousScores: undefined }));
             startTimer();
         }
     };
@@ -209,7 +209,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
             }
         });
 
-        setGameState(prev => ({...prev, status: 'leaderboard', scores: newScores, showResults: true }));
+        setGameState(prev => ({...prev, status: 'leaderboard', scores: newScores, previousScores: prev.scores, showResults: true }));
     }
 
     const nextQuestion = () => {
@@ -342,7 +342,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
 
                 <main className="lg:col-span-3 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
                     {gameState.status === 'lobby' && <p className="text-2xl text-gray-500">{gameState.questions.length > 0 ? `Quiz on "${topic}" is ready!` : "Generate a quiz to begin."}</p>}
-                    {gameState.status === 'finished' && <div className="text-center"><h2 className="text-3xl font-bold mb-4">Final Results</h2><Leaderboard scores={gameState.scores} players={gameState.players} isFinal={true} /></div>}
+                    {gameState.status === 'finished' && <div className="text-center"><h2 className="text-3xl font-bold mb-4">Final Results</h2><Leaderboard scores={gameState.scores} players={gameState.players} isFinal={true} previousScores={gameState.previousScores}/></div>}
                     {(gameState.status === 'in-progress' || gameState.status === 'question-results') && currentQuestion && (
                         <div className="w-full text-center">
                             <p className="text-lg text-gray-500">Question {gameState.currentQuestionIndex + 1} / {gameState.questions.length}</p>
@@ -353,7 +353,7 @@ const HostView: React.FC<{ hostPeerId: string; onReset: () => void; }> = ({ host
                     {gameState.status === 'leaderboard' && (
                         <div className="w-full text-center">
                             <h2 className="text-3xl font-bold mb-4">Leaderboard</h2>
-                             <Leaderboard scores={gameState.scores} players={gameState.players} />
+                             <Leaderboard scores={gameState.scores} players={gameState.players} previousScores={gameState.previousScores} />
                         </div>
                     )}
                 </main>
